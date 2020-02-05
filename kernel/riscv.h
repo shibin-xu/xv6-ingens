@@ -321,6 +321,7 @@ sfence_vma()
 
 
 #define PGSIZE 4096 // bytes per page
+#define HPGSIZE 2097152 // bytes per huge page
 #define PGSHIFT 12  // bits of offset within a page
 
 #define PGROUNDUP(sz)  (((sz)+PGSIZE-1) & ~(PGSIZE-1))
