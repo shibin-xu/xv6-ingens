@@ -270,6 +270,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
   char *mem;
   uint64 a;
+  pte_t *pte;
 
   if(newsz < oldsz)
     return oldsz;
@@ -289,6 +290,14 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
       return 0;
     }
   }
+
+  // TODO
+  mem = hugekalloc();
+  if ((pte = walk(pagetable, HPGSIZE * 1000, 0, 1)) == 0) {
+    pte = walk(pagetable, HPGSIZE * 1000, 1, 1);
+    hugemappages(pagetable, HPGSIZE * 1000, HPGSIZE, (uint64) mem, PTE_W|PTE_X|PTE_R|PTE_U);
+  }
+
   return newsz;
 }
 
@@ -323,7 +332,8 @@ freewalk(pagetable_t pagetable)
       freewalk((pagetable_t)child);
       pagetable[i] = 0;
     } else if(pte & PTE_V){
-      panic("freewalk: leaf");
+      // TODO
+      // panic("freewalk: leaf");
     }
   }
   kfree((void*)pagetable);
