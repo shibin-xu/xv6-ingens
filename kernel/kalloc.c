@@ -10,7 +10,6 @@
 #include "defs.h"
 
 void freerange(void *pa_start, void *pa_end);
-void hugekfree(void *pa);
 void hugefreerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
@@ -44,7 +43,7 @@ kinit()
   hugefreerange((void*)PHYSMID, (void*)PHYSTOP);
   initialized = 1;
   printf("free base pages %d MB\n", kmem.nfree * PGSIZE / (1024 * 1024));
-  printf("free huge pages %d MB\n", hugekmem.nfree *HPGSIZE / (1024 * 1024));
+  printf("free huge pages %d MB\n", hugekmem.nfree * HPGSIZE / (1024 * 1024));
 }
 
 void
@@ -129,6 +128,27 @@ kalloc(void)
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
+  return (void*)r;
+}
+
+// Allocate one 2-MB page of physical memory.
+// Returns a pointer that the kernel can use.
+// Returns 0 if the memory cannot be allocated.
+void *
+hugekalloc(void)
+{
+  struct run *r;
+
+  acquire(&hugekmem.lock);
+  r = hugekmem.freelist;
+  if(r){
+    hugekmem.freelist = r->next;
+    hugekmem.nfree--;
+  }
+  release(&hugekmem.lock);
+
+  if(r)
+    memset((char*)r, 5, HPGSIZE); // fill with junk
   return (void*)r;
 }
 
