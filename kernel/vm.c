@@ -72,7 +72,7 @@ kvminithart()
 // A 64-bit virtual address is split into five fields:
 //   39..63 -- must be zero.
 //   30..38 -- 9 bits of level-2 index.
-//   21..39 -- 9 bits of level-1 index.
+//   21..29 -- 9 bits of level-1 index.
 //   12..20 -- 9 bits of level-0 index.
 //    0..12 -- 12 bits of byte offset within the page.
 static pte_t *
@@ -357,6 +357,19 @@ uvmclear(pagetable_t pagetable, uint64 va)
   if(pte == 0)
     panic("uvmclear");
   *pte &= ~PTE_U;
+}
+
+// clear the access bit of a PTE.
+// used for idle page tracking.
+void
+uvm_clear_ref(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+
+  pte = walk(pagetable, va, 0);
+  if(pte == 0)
+    panic("uvm_clear_ref");
+  *pte &= ~PTE_A;
 }
 
 // Copy from kernel to user.
