@@ -157,3 +157,9 @@ sys_nfree(void)
 {
   return kmem.nfree;
 }
+
+uint64
+sys_hugenfree(void)
+{
+  return hugekmem.nfree;
+}
