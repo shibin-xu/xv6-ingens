@@ -191,7 +191,8 @@ hugemappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
+    // when upgrade from base page to huge page, *pte could have PTE_V set
+    if ((*pte & PTE_R) | (*pte & PTE_W) | (*pte & PTE_X))
       panic("remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
@@ -215,23 +216,42 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
   a = PGROUNDDOWN(va);
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
-    if((pte = walk(pagetable, a, 0, 0)) == 0)
-      panic("uvmunmap: walk");
+    uint64 ishuge = 0;
+    if (a % HPGSIZE == 0 && ((pte = walk(pagetable, a, 0, 1)) != 0)) {
+      // could be huge page
+      ishuge = (*pte & PTE_R) | (*pte & PTE_W) | (*pte & PTE_X);
+    }
+
+    if(!ishuge && (pte = walk(pagetable, a, 0, 0)) == 0) {
+      panic("uvmunmap: base page not mapped");
+    }
+
     if((*pte & PTE_V) == 0){
-      printf("va=%p pte=%p\n", a, *pte);
       panic("uvmunmap: not mapped");
     }
+
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
+
     if(do_free){
       pa = PTE2PA(*pte);
-      kfree((void*)pa);
+      if (ishuge)
+        hugekfree((void*)pa);
+      else
+        kfree((void*)pa);
     }
+
     *pte = 0;
-    if(a == last)
+
+    if(a >= last)
       break;
-    a += PGSIZE;
-    pa += PGSIZE;
+    if (ishuge) {
+      a += HPGSIZE;
+      pa += HPGSIZE;
+    } else {
+      a += PGSIZE;
+      pa += PGSIZE;
+    }
   }
 }
 
@@ -263,6 +283,56 @@ uvminit(pagetable_t pagetable, uchar *src, uint sz)
   memmove(mem, src, sz);
 }
 
+uint64
+uvmupgrade(pagetable_t pagetable, uint64 sz)
+{
+  char *mem;
+  uint64 a, pa;
+  // TODO: fix flags
+  // uint flags;
+  pte_t *pte;
+
+  a = HPGSIZE;
+  for (; a < HPGROUNDDOWN(sz); a += HPGSIZE) {
+    if ((pte = walk(pagetable, a, 0, 1)) == 0) {
+      uvmdealloc(pagetable, 0, a);
+      return 0;
+    }
+    if ((*pte & PTE_R) || (*pte & PTE_W) || (*pte & PTE_X))
+      continue;
+
+    mem = hugekalloc();
+    if (mem == 0) {
+      uvmdealloc(pagetable, 0, a);
+      return 0;
+    }
+    memset(mem, 0, HPGSIZE);
+
+    // copy from base page to huge page
+    for (int i = 0; i < HPGSIZE / PGSIZE; i++) {
+      if ((pte = walk(pagetable, a + i*PGSIZE, 0, 0)) == 0)
+        panic("uvmupgrade: pte should exist");
+      pa = PTE2PA(*pte);
+      // flags = PTE_FLAGS(*pte);
+      memmove(mem + i*PGSIZE, (char *)pa, PGSIZE);
+    }
+
+    // free base pages
+    uvmunmap(pagetable, a, HPGSIZE, 1);
+
+    sfence_vma();
+
+    if (hugemappages(pagetable, a, HPGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
+      hugekfree(mem);
+      uvmdealloc(pagetable, 0, a);
+      return 0;
+    }
+  }
+
+  return sz;
+}
+
+
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
 uint64
@@ -290,13 +360,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
     }
   }
 
-  // TODO
-  // pte_t *pte;
-  // mem = hugekalloc();
-  // if ((pte = walk(pagetable, HPGSIZE * 1000, 0, 1)) == 0) {
-  //   pte = walk(pagetable, HPGSIZE * 1000, 1, 1);
-  //   hugemappages(pagetable, HPGSIZE * 1000, HPGSIZE, (uint64) mem, PTE_W|PTE_X|PTE_R|PTE_U);
-  // }
+  uvmupgrade(pagetable, newsz);
 
   return newsz;
 }

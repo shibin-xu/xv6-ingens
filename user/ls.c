@@ -30,18 +30,6 @@ ls(char *path)
   struct dirent de;
   struct stat st;
 
-  // should have access to huge page
-  // uint64 ptr = 2097152 * 1000;
-  // int sum = 0;
-  // for (;;) {
-  //   if (ptr + 4 >= 2097152 * 1000 + 2097152)
-  //     break;
-  //   ptr += 4;
-  //   sum += *(int *)ptr;
-  // }
-  // printf("able to access huge page\n");
-  // printf("sum %d\n", sum);
-
   if((fd = open(path, 0)) < 0){
     fprintf(2, "ls: cannot open %s\n", path);
     return;
