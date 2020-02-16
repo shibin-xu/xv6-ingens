@@ -292,6 +292,7 @@ uvmupgrade(pagetable_t pagetable, uint64 sz)
   // uint flags;
   pte_t *pte;
 
+  // avoid upgrading first 512 base pages since they contain user stack
   a = HPGSIZE;
   for (; a < HPGROUNDDOWN(sz); a += HPGSIZE) {
     if ((pte = walk(pagetable, a, 0, 1)) == 0) {
@@ -308,6 +309,10 @@ uvmupgrade(pagetable_t pagetable, uint64 sz)
     }
     memset(mem, 0, HPGSIZE);
 
+    // after upgrading 512 base pages to 1 huge page, we need to free the pagetable for them
+    pte = walk(pagetable, a, 0, 1);
+    uint64 p = PTE2PA(*pte);
+
     // copy from base page to huge page
     for (int i = 0; i < HPGSIZE / PGSIZE; i++) {
       if ((pte = walk(pagetable, a + i*PGSIZE, 0, 0)) == 0)
@@ -317,10 +322,9 @@ uvmupgrade(pagetable_t pagetable, uint64 sz)
       memmove(mem + i*PGSIZE, (char *)pa, PGSIZE);
     }
 
-    // free base pages
+    // free base pages and pagetable
     uvmunmap(pagetable, a, HPGSIZE, 1);
-
-    sfence_vma();
+    kfree((void *)p);
 
     if (hugemappages(pagetable, a, HPGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
       hugekfree(mem);
@@ -328,6 +332,8 @@ uvmupgrade(pagetable_t pagetable, uint64 sz)
       return 0;
     }
   }
+
+  sfence_vma();
 
   return sz;
 }

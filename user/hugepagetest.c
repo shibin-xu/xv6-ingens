@@ -8,7 +8,7 @@ main(int argc, char **argv)
   printf("malloc %d bytes\n", sz);
   char *arr = malloc(sz);
 
-  printf("sequential access\n", sz);
+  printf("sequential access %d bytes\n", sz);
   for (int i = 0; i < sz; i++)
     *(arr + i) = 1;
 
