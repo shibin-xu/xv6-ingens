@@ -288,8 +288,6 @@ uvmupgrade(pagetable_t pagetable, uint64 sz)
 {
   char *mem;
   uint64 a, pa;
-  // TODO: fix flags
-  // uint flags;
   pte_t *pte;
 
   // avoid upgrading first 512 base pages since they contain user stack
@@ -318,7 +316,6 @@ uvmupgrade(pagetable_t pagetable, uint64 sz)
       if ((pte = walk(pagetable, a + i*PGSIZE, 0, 0)) == 0)
         panic("uvmupgrade: pte should exist");
       pa = PTE2PA(*pte);
-      // flags = PTE_FLAGS(*pte);
       memmove(mem + i*PGSIZE, (char *)pa, PGSIZE);
     }
 
@@ -338,6 +335,42 @@ uvmupgrade(pagetable_t pagetable, uint64 sz)
   return sz;
 }
 
+uint64
+uvmdowngrade(pagetable_t pagetable, uint64 va, uint64 sz)
+{
+  char *mem;
+  uint64 a, pa;
+  pte_t *pte;
+
+  a = HPGROUNDDOWN(va);
+  for (; a < HPGROUNDDOWN(va + sz); a += HPGSIZE) {
+    if ((pte = walk(pagetable, a, 0, 1)) == 0) {
+      uvmdealloc(pagetable, va, a);
+      return 0;
+    }
+    // check if huge page is mapped
+    if (!((*pte & PTE_R) || (*pte & PTE_W) || (*pte & PTE_X)))
+      continue;
+
+    // after downgrading 1 huge page to 512 base pages, we need to free the huge page
+    pa = PTE2PA(*pte);
+    *pte = 0;
+    for (int i = 0; i < HPGSIZE / PGSIZE; i++) {
+      mem = kalloc();
+      memmove(mem, (char *)(pa + i*PGSIZE), PGSIZE);
+      if (mappages(pagetable, a + i*PGSIZE, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
+        kfree(mem);
+        uvmdealloc(pagetable, va, a);
+        return 0;
+      }
+    }
+    hugekfree((void *)pa);
+  }
+
+  sfence_vma();
+
+  return sz;
+}
 
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
@@ -367,6 +400,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
   }
 
   uvmupgrade(pagetable, newsz);
+  uvmdowngrade(pagetable, HPGSIZE, newsz);
 
   return newsz;
 }
