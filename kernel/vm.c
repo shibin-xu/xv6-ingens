@@ -17,6 +17,9 @@ extern char trampoline[]; // trampoline.S
 
 void print(pagetable_t);
 
+int UPGRADE = 1;
+int DOWNGRADE = 0;
+
 /*
  * create a direct-map page table for the kernel and
  * turn on paging. called early, in supervisor mode.
@@ -209,41 +212,41 @@ hugemappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 void
 uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
 {
-  uint64 a, last;
+  uint64 a, last, ishuge = 0;
   pte_t *pte;
   uint64 pa;
 
-  a = PGROUNDDOWN(va);
-  last = PGROUNDDOWN(va + size - 1);
-  for(;;){
-    uint64 ishuge = 0;
-    if (a % HPGSIZE == 0 && ((pte = walk(pagetable, a, 0, 1)) != 0)) {
-      // could be huge page
+  if (size == 0)
+    return;
+
+  if (((pte = walk(pagetable, va, 0, 1)) != 0) && ((*pte & PTE_R) | (*pte & PTE_W) | (*pte & PTE_X)))
+    a = HPGROUNDDOWN(va);
+  else
+    a = PGROUNDDOWN(va);
+  if (((pte = walk(pagetable, va + size - 1, 0, 1)) != 0) && (*pte & PTE_R) | (*pte & PTE_W) | (*pte & PTE_X))
+    last = HPGROUNDDOWN(va + size - 1);
+  else
+    last = PGROUNDDOWN(va + size - 1);
+  for (;;){
+    if (((pte = walk(pagetable, a, 0, 1)) != 0))
       ishuge = (*pte & PTE_R) | (*pte & PTE_W) | (*pte & PTE_X);
-    }
 
-    if(!ishuge && (pte = walk(pagetable, a, 0, 0)) == 0) {
+    if (!ishuge && (pte = walk(pagetable, a, 0, 0)) == 0)
       panic("uvmunmap: base page not mapped");
-    }
-
-    if((*pte & PTE_V) == 0){
+    if ((*pte & PTE_V) == 0)
       panic("uvmunmap: not mapped");
-    }
-
-    if(PTE_FLAGS(*pte) == PTE_V)
+    if (PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
 
-    if(do_free){
+    if (do_free){
       pa = PTE2PA(*pte);
       if (ishuge)
         hugekfree((void*)pa);
       else
         kfree((void*)pa);
     }
-
     *pte = 0;
-
-    if(a >= last)
+    if (a == last)
       break;
     if (ishuge) {
       a += HPGSIZE;
@@ -252,6 +255,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 size, int do_free)
       a += PGSIZE;
       pa += PGSIZE;
     }
+    if (a > last)
+      break;
   }
 }
 
@@ -373,29 +378,38 @@ uint64
 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
   char *mem;
-  uint64 a;
+  uint64 a, ishuge = 0;
+  pte_t *pte;
 
-  if(newsz < oldsz)
+  if (newsz < oldsz)
     return oldsz;
 
-  oldsz = PGROUNDUP(oldsz);
+  // check if last mapped page is a huge page
+  if ((pte = walk(pagetable, oldsz, 0, 1)) != 0)
+    ishuge = (*pte & PTE_R) | (*pte & PTE_W) | (*pte & PTE_X);
+  if (ishuge)
+    oldsz = HPGROUNDUP(oldsz);
+  else
+    oldsz = PGROUNDUP(oldsz);
   a = oldsz;
-  for(; a < newsz; a += PGSIZE){
+  for (; a < newsz; a += PGSIZE){
     mem = kalloc();
-    if(mem == 0){
+    if (mem == 0){
       uvmdealloc(pagetable, a, oldsz);
       return 0;
     }
     memset(mem, 0, PGSIZE);
-    if(mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+    if (mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
       kfree(mem);
       uvmdealloc(pagetable, a, oldsz);
       return 0;
     }
   }
 
-  uvmupgrade(pagetable, HPGSIZE, newsz);
-  uvmdowngrade(pagetable, HPGSIZE, newsz);
+  if (UPGRADE)
+    uvmupgrade(pagetable, HPGSIZE, newsz);
+  if (DOWNGRADE)
+    uvmdowngrade(pagetable, HPGSIZE, newsz);
 
   return newsz;
 }
@@ -407,12 +421,27 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 uint64
 uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
-  if(newsz >= oldsz)
+  uint64 newup, olddown, pa, offset, ishuge = 0;
+  pte_t *pte;
+
+  if (newsz >= oldsz)
     return oldsz;
 
-  uint64 newup = PGROUNDUP(newsz);
-  if(newup < PGROUNDUP(oldsz))
+  if ((pte = walk(pagetable, newsz, 0, 1)) != 0 && (ishuge = (*pte & PTE_R) | (*pte & PTE_W) | (*pte & PTE_X))) {
+    newup = HPGROUNDUP(newsz);
+    olddown = HPGROUNDUP(oldsz);
+  } else {
+    newup = PGROUNDUP(newsz);
+    olddown = PGROUNDUP(oldsz);
+  }
+  if (newup < olddown)
     uvmunmap(pagetable, newup, oldsz - newup, 1);
+  if (ishuge && newup - newsz >= PGSIZE) {
+    // newsz is within a huge page, and we want to free the base pages within this huge page
+    pa = PTE2PA(*pte);
+    offset = PGROUNDUP(newsz) % HPGSIZE;
+    memset((void *)(pa + offset), 0, HPGSIZE - offset);
+  }
 
   return newsz;
 }
