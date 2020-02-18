@@ -284,17 +284,17 @@ uvminit(pagetable_t pagetable, uchar *src, uint sz)
 }
 
 uint64
-uvmupgrade(pagetable_t pagetable, uint64 sz)
+uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
 {
   char *mem;
   uint64 a, pa;
   pte_t *pte;
 
   // avoid upgrading first 512 base pages since they contain user stack
-  a = HPGSIZE;
-  for (; a < HPGROUNDDOWN(sz); a += HPGSIZE) {
+  a = HPGROUNDDOWN(start);
+  for (; a < HPGROUNDDOWN(end); a += HPGSIZE) {
     if ((pte = walk(pagetable, a, 0, 1)) == 0) {
-      uvmdealloc(pagetable, 0, a);
+      uvmdealloc(pagetable, start, a);
       return 0;
     }
     if ((*pte & PTE_R) || (*pte & PTE_W) || (*pte & PTE_X))
@@ -302,15 +302,12 @@ uvmupgrade(pagetable_t pagetable, uint64 sz)
 
     mem = hugekalloc();
     if (mem == 0) {
-      uvmdealloc(pagetable, 0, a);
+      uvmdealloc(pagetable, start, a);
       return 0;
     }
     memset(mem, 0, HPGSIZE);
-
     // after upgrading 512 base pages to 1 huge page, we need to free the pagetable for them
-    pte = walk(pagetable, a, 0, 1);
     uint64 p = PTE2PA(*pte);
-
     // copy from base page to huge page
     for (int i = 0; i < HPGSIZE / PGSIZE; i++) {
       if ((pte = walk(pagetable, a + i*PGSIZE, 0, 0)) == 0)
@@ -318,34 +315,32 @@ uvmupgrade(pagetable_t pagetable, uint64 sz)
       pa = PTE2PA(*pte);
       memmove(mem + i*PGSIZE, (char *)pa, PGSIZE);
     }
-
     // free base pages and pagetable
     uvmunmap(pagetable, a, HPGSIZE, 1);
     kfree((void *)p);
-
     if (hugemappages(pagetable, a, HPGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
       hugekfree(mem);
-      uvmdealloc(pagetable, 0, a);
+      uvmdealloc(pagetable, start, a);
       return 0;
     }
   }
 
   sfence_vma();
 
-  return sz;
+  return end;
 }
 
 uint64
-uvmdowngrade(pagetable_t pagetable, uint64 va, uint64 sz)
+uvmdowngrade(pagetable_t pagetable, uint64 start, uint64 end)
 {
   char *mem;
   uint64 a, pa;
   pte_t *pte;
 
-  a = HPGROUNDDOWN(va);
-  for (; a < HPGROUNDDOWN(va + sz); a += HPGSIZE) {
+  a = HPGROUNDDOWN(start);
+  for (; a < HPGROUNDDOWN(end); a += HPGSIZE) {
     if ((pte = walk(pagetable, a, 0, 1)) == 0) {
-      uvmdealloc(pagetable, va, a);
+      uvmdealloc(pagetable, start, a);
       return 0;
     }
     // check if huge page is mapped
@@ -360,7 +355,7 @@ uvmdowngrade(pagetable_t pagetable, uint64 va, uint64 sz)
       memmove(mem, (char *)(pa + i*PGSIZE), PGSIZE);
       if (mappages(pagetable, a + i*PGSIZE, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
         kfree(mem);
-        uvmdealloc(pagetable, va, a);
+        uvmdealloc(pagetable, start, a);
         return 0;
       }
     }
@@ -369,7 +364,7 @@ uvmdowngrade(pagetable_t pagetable, uint64 va, uint64 sz)
 
   sfence_vma();
 
-  return sz;
+  return end;
 }
 
 // Allocate PTEs and physical memory to grow process from oldsz to
@@ -399,7 +394,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
     }
   }
 
-  uvmupgrade(pagetable, newsz);
+  uvmupgrade(pagetable, HPGSIZE, newsz);
   uvmdowngrade(pagetable, HPGSIZE, newsz);
 
   return newsz;
