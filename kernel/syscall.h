@@ -25,3 +25,4 @@
 #define SYS_ntas   22
 #define SYS_nfree  23
 #define SYS_hugenfree  24
+#define SYS_promo  25

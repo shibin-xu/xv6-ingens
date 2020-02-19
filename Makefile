@@ -31,7 +31,8 @@ OBJS = \
   $K/plic.o \
   $K/virtio_disk.o \
   $K/buddy.o \
-  $K/list.o
+  $K/list.o \
+  $K/promo.o
 
 # uncomment for lab net
 #OBJS += \
