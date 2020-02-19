@@ -5,11 +5,22 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
 
 /*
  * the kernel's page table.
  */
 pagetable_t kernel_pagetable;
+
+// root page table with lock for each process
+struct rpgtable {
+  pagetable_t pagetable;
+  struct spinlock lock;
+};
+
+// record the root page table for all process.
+struct rpgtable all_root_pagetable[NPROC];
+
 
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
@@ -19,7 +30,6 @@ void print(pagetable_t);
 
 int UPGRADE = 1;
 int DOWNGRADE = 0;
-
 /*
  * create a direct-map page table for the kernel and
  * turn on paging. called early, in supervisor mode.
@@ -55,6 +65,13 @@ kvminit()
   // map the trampoline for trap entry/exit to
   // the highest virtual address in the kernel.
   kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+
+  // init lock for root page table for all process.
+  struct rpgtable *t;
+
+  for (t = all_root_pagetable; t < &all_root_pagetable[NPROC]; t++) {
+    initlock(&t->lock, "pagetable");
+  }
 }
 
 // Switch h/w page table register to the kernel's page table,
@@ -98,6 +115,32 @@ walk(pagetable_t pagetable, uint64 va, int alloc, int level)
     }
   }
   return &pagetable[PX(level, va)];
+}
+
+// pagetable :    0     - look for empty entry.
+//            otherwise - look for the corresponding entry.
+// return the corresponding pointer for a struct entry on all_root_pagetable.
+// NOTE: If sucessfully return, the corresponding entry lock is still on HOLD.
+//       Remeber to relase the lock after use.
+static struct rpgtable*
+findrptentry(pagetable_t pagetable) {
+
+  struct rpgtable *t;
+  for (t = all_root_pagetable; t < &all_root_pagetable[NPROC]; t++) {
+    acquire(&t->lock);
+    if (t->pagetable == pagetable) {
+      goto found;
+    } else {
+      release(&t->lock);
+    }
+  }
+  if (pagetable == 0) {
+    panic("no free space on all_root_pagetable");
+  } else {
+    panic("no match for the searched pagetable_t");
+  }
+found:
+  return t;
 }
 
 // Look up a virtual address, return the physical address,
@@ -269,6 +312,11 @@ uvmcreate()
   if(pagetable == 0)
     panic("uvmcreate: out of memory");
   memset(pagetable, 0, PGSIZE);
+
+  // find a space on rpgtable array, and assign the value.
+  struct rpgtable *t = findrptentry(0);
+  t->pagetable = pagetable;
+  release(&t->lock);
   return pagetable;
 }
 
@@ -471,6 +519,9 @@ freewalk(pagetable_t pagetable)
 void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
+  struct rpgtable *t = findrptentry(pagetable);
+  t->pagetable = 0;
+  release(&t->lock);
   uvmunmap(pagetable, 0, sz, 1);
   freewalk(pagetable);
 }
