@@ -29,6 +29,7 @@ int mount(char*, char *);
 int umount(char*);
 int nfree();
 int hugenfree();
+int promo();
 
 // ulib.c
 int stat(const char*, struct stat*);

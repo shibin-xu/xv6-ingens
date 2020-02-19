@@ -107,6 +107,7 @@ extern uint64 sys_uptime(void);
 extern uint64 sys_ntas(void);
 extern uint64 sys_nfree(void);
 extern uint64 sys_hugenfree(void);
+extern uint64 sys_promo(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -133,6 +134,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_ntas]    sys_ntas,
 [SYS_nfree]   sys_nfree,
 [SYS_hugenfree]   sys_hugenfree,
+[SYS_promo]   sys_promo,
 };
 
 void
