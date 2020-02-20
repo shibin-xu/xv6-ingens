@@ -220,3 +220,6 @@ int             nettimer(void);
 int             virtio_net_init(int, void *);
 int             virtio_net_send(int, const void *data, int len);
 int             virtio_net_recv(int, void *data, int len);
+
+// promo.c
+int promo(void);
