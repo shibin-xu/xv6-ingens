@@ -349,9 +349,7 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
   char *mem;
   uint64 a, pa;
   pte_t *pte;
-  int upgraded;
-
-  // struct rpgtable *rpgtb = findrptentry(pagetable);
+  int upgraded = 0;
 
   // avoid upgrading first 512 base pages since they contain user stack
   a = HPGROUNDDOWN(start);
@@ -359,7 +357,6 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
     if ((pte = walk(pagetable, a, 0, 1)) == 0) {
       uvmdealloc(pagetable, start, a);
       upgraded = 0;
-      // release(&rpgtb->lock);
       return 0;
     }
     if ((*pte & PTE_R) || (*pte & PTE_W) || (*pte & PTE_X))
@@ -369,7 +366,6 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
     if (mem == 0) {
       uvmdealloc(pagetable, start, a);
       upgraded = 0;
-      // release(&rpgtb->lock);
       return 0;
     }
     memset(mem, 0, HPGSIZE);
@@ -390,16 +386,14 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
       hugekfree(mem);
       uvmdealloc(pagetable, start, a);
       upgraded = 0;
-      // release(&rpgtb->lock);
       return 0;
     }
   }
 
-  if (upgraded != 0) {
+  if (upgraded) {
     sfence_vma();
   }
 
-  // release(&rpgtb->lock);
   return end;
 }
 
@@ -409,11 +403,13 @@ uvmdowngrade(pagetable_t pagetable, uint64 start, uint64 end)
   char *mem;
   uint64 a, pa;
   pte_t *pte;
+  int downgraded = 0;
 
   a = HPGROUNDDOWN(start);
   for (; a < HPGROUNDDOWN(end); a += HPGSIZE) {
     if ((pte = walk(pagetable, a, 0, 1)) == 0) {
       uvmdealloc(pagetable, start, a);
+      downgraded = 0;
       return 0;
     }
     // check if huge page is mapped
@@ -429,13 +425,17 @@ uvmdowngrade(pagetable_t pagetable, uint64 start, uint64 end)
       if (mappages(pagetable, a + i*PGSIZE, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
         kfree(mem);
         uvmdealloc(pagetable, start, a);
+        downgraded = 0;
         return 0;
       }
     }
+    downgraded = 1;
     hugekfree((void *)pa);
   }
 
-  sfence_vma();
+  if (downgraded) {
+    sfence_vma();
+  }
 
   return end;
 }
