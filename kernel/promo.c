@@ -15,10 +15,8 @@ promo(void)
     if(p->state != UNUSED) {
         uint64 sz = p->sz;
         pagetable_t pgtb = p->pagetable;
-        // acquire pgtb lock
         release(&p->lock);
         uvmupgrade(pgtb, HPGSIZE, sz);
-        // lease pgtb lock
     } else {
       release(&p->lock);
     }

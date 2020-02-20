@@ -143,6 +143,8 @@ found:
   return t;
 }
 
+
+
 // Look up a virtual address, return the physical address,
 // or 0 if not mapped.
 // Can only be used to look up user pages.
@@ -344,12 +346,15 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
   pte_t *pte;
   int upgraded;
 
+  struct rpgtable *rpgtb = findrptentry(pagetable);
+
   // avoid upgrading first 512 base pages since they contain user stack
   a = HPGROUNDDOWN(start);
   for (; a < HPGROUNDDOWN(end); a += HPGSIZE) {
     if ((pte = walk(pagetable, a, 0, 1)) == 0) {
       uvmdealloc(pagetable, start, a);
       upgraded = 0;
+      release(&rpgtb->lock);
       return 0;
     }
     if ((*pte & PTE_R) || (*pte & PTE_W) || (*pte & PTE_X))
@@ -359,6 +364,7 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
     if (mem == 0) {
       uvmdealloc(pagetable, start, a);
       upgraded = 0;
+      release(&rpgtb->lock);
       return 0;
     }
     memset(mem, 0, HPGSIZE);
@@ -379,6 +385,7 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
       hugekfree(mem);
       uvmdealloc(pagetable, start, a);
       upgraded = 0;
+      release(&rpgtb->lock);
       return 0;
     }
   }
@@ -387,6 +394,7 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
     sfence_vma();
   }
 
+  release(&rpgtb->lock);
   return end;
 }
 
