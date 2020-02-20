@@ -179,8 +179,8 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, PGSIZE, 0);
   uvmunmap(pagetable, TRAPFRAME, PGSIZE, 0);
-  if(sz > 0)
-    uvmfree(pagetable, sz);
+  // still need to call uvmfree even if sz is 0 to free up rpgtable
+  uvmfree(pagetable, sz);
 }
 
 // a user program that calls exec("/init")
