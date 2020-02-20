@@ -158,6 +158,7 @@ proc_pagetable(struct proc *p)
   // An empty page table.
   pagetable = uvmcreate();
 
+  struct spinlock *lock = uvmlock(pagetable);
   // map the trampoline code (for system call return)
   // at the highest user virtual address.
   // only the supervisor uses it, on the way
@@ -168,6 +169,7 @@ proc_pagetable(struct proc *p)
   // map the trapframe just below TRAMPOLINE, for trampoline.S.
   mappages(pagetable, TRAPFRAME, PGSIZE,
            (uint64)(p->tf), PTE_R | PTE_W);
+  release(lock);
 
   return pagetable;
 }
@@ -177,8 +179,10 @@ proc_pagetable(struct proc *p)
 void
 proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
+  struct spinlock *lock = uvmlock(pagetable);
   uvmunmap(pagetable, TRAMPOLINE, PGSIZE, 0);
   uvmunmap(pagetable, TRAPFRAME, PGSIZE, 0);
+  release(lock);
   // still need to call uvmfree even if sz is 0 to free up rpgtable
   uvmfree(pagetable, sz);
 }
@@ -228,16 +232,19 @@ growproc(int n)
 {
   uint sz;
   struct proc *p = myproc();
+  struct spinlock *lock = uvmlock(p->pagetable);
 
   sz = p->sz;
   if(n > 0){
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+      release(lock);
       return -1;
     }
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
   p->sz = sz;
+  release(lock);
   return 0;
 }
 
@@ -255,9 +262,18 @@ fork(void)
     return -1;
   }
 
+  // realse 1st lock while trying to acquire 2nd lock to avoid acquiring
+  // 1st lock twice in findrptentry()
+  struct spinlock *plock = uvmlock(p->pagetable);
+  release(plock);
+  struct spinlock *nplock = uvmlock(np->pagetable);
+  acquire(plock);
+
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
+    release(plock);
+    release(nplock);
     release(&np->lock);
     return -1;
   }
@@ -284,6 +300,8 @@ fork(void)
   np->state = RUNNABLE;
 
   release(&np->lock);
+  release(plock);
+  release(nplock);
 
   return pid;
 }

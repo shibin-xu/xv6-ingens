@@ -175,6 +175,7 @@ int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 uint64          uvmupgrade(pagetable_t, uint64, uint64);
 uint64          uvmdowngrade(pagetable_t, uint64, uint64);
+struct spinlock* uvmlock(pagetable_t);
 
 // plic.c
 void            plicinit(void);

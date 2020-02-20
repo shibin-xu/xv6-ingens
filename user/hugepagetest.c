@@ -7,6 +7,8 @@ main(int argc, char **argv)
   int sz = 4096 * 512 * 10;
   printf("malloc %d bytes\n", sz);
   char *arr = malloc(sz);
+  // give promo some time to upgrade to huge pages
+  sleep(10);
 
   printf("sequential access %d bytes\n", sz);
   for (int i = 0; i < sz; i++)

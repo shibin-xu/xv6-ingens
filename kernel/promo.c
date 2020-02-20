@@ -16,7 +16,9 @@ promo(void)
         uint64 sz = p->sz;
         pagetable_t pgtb = p->pagetable;
         release(&p->lock);
+        struct spinlock *lock = uvmlock(pgtb);
         uvmupgrade(pgtb, HPGSIZE, sz);
+        release(lock);
     } else {
       release(&p->lock);
     }

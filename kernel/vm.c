@@ -123,8 +123,8 @@ walk(pagetable_t pagetable, uint64 va, int alloc, int level)
 // NOTE: If sucessfully return, the corresponding entry lock is still on HOLD.
 //       Remeber to relase the lock after use.
 static struct rpgtable*
-findrptentry(pagetable_t pagetable) {
-
+findrptentry(pagetable_t pagetable)
+{
   struct rpgtable *t;
   for (t = all_root_pagetable; t < &all_root_pagetable[NPROC]; t++) {
     acquire(&t->lock);
@@ -143,7 +143,12 @@ found:
   return t;
 }
 
-
+struct spinlock*
+uvmlock(pagetable_t pagetable)
+{
+  struct rpgtable *t = findrptentry(pagetable);
+  return &t->lock;
+}
 
 // Look up a virtual address, return the physical address,
 // or 0 if not mapped.
@@ -346,7 +351,7 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
   pte_t *pte;
   int upgraded;
 
-  struct rpgtable *rpgtb = findrptentry(pagetable);
+  // struct rpgtable *rpgtb = findrptentry(pagetable);
 
   // avoid upgrading first 512 base pages since they contain user stack
   a = HPGROUNDDOWN(start);
@@ -354,7 +359,7 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
     if ((pte = walk(pagetable, a, 0, 1)) == 0) {
       uvmdealloc(pagetable, start, a);
       upgraded = 0;
-      release(&rpgtb->lock);
+      // release(&rpgtb->lock);
       return 0;
     }
     if ((*pte & PTE_R) || (*pte & PTE_W) || (*pte & PTE_X))
@@ -364,7 +369,7 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
     if (mem == 0) {
       uvmdealloc(pagetable, start, a);
       upgraded = 0;
-      release(&rpgtb->lock);
+      // release(&rpgtb->lock);
       return 0;
     }
     memset(mem, 0, HPGSIZE);
@@ -385,7 +390,7 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
       hugekfree(mem);
       uvmdealloc(pagetable, start, a);
       upgraded = 0;
-      release(&rpgtb->lock);
+      // release(&rpgtb->lock);
       return 0;
     }
   }
@@ -394,7 +399,7 @@ uvmupgrade(pagetable_t pagetable, uint64 start, uint64 end)
     sfence_vma();
   }
 
-  release(&rpgtb->lock);
+  // release(&rpgtb->lock);
   return end;
 }
 
@@ -468,11 +473,6 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
       return 0;
     }
   }
-
-  if (UPGRADE)
-    uvmupgrade(pagetable, HPGSIZE, newsz);
-  if (DOWNGRADE)
-    uvmdowngrade(pagetable, HPGSIZE, newsz);
 
   return newsz;
 }

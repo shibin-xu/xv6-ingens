@@ -66,9 +66,13 @@ exec(char *path, char **argv)
   // Allocate two pages at the next page boundary.
   // Use the second as the user stack.
   sz = PGROUNDUP(sz);
-  if((sz = uvmalloc(pagetable, sz, sz + 2*PGSIZE)) == 0)
+  struct spinlock *lock = uvmlock(pagetable);
+  if((sz = uvmalloc(pagetable, sz, sz + 2*PGSIZE)) == 0) {
+    release(lock);
     goto bad;
+  }
   uvmclear(pagetable, sz-2*PGSIZE);
+  release(lock);
   sp = sz;
   stackbase = sp - PGSIZE;
 
