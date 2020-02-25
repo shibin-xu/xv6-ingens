@@ -319,6 +319,14 @@ sfence_vma()
   asm volatile("sfence.vma zero, zero");
 }
 
+// flush the TLB.
+static inline void
+flush_tlb(uint64 va, uint64 pagetable)
+{
+  // flush TLB entries for va in pagetable
+  asm volatile("sfence.vma %0, %1" : "=r" (va) : "r" (pagetable));
+}
+
 
 #define PGSIZE 4096 // bytes per page
 #define HPGSIZE 2097152 // bytes per huge page
