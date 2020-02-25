@@ -41,9 +41,7 @@ int main (int argc, char** argv) {
     large_limit = argc > 5 ? atoi(argv[5]) : LARGE_LIMIT_DEFAULT;
 
     //get random seed from system timer
-    time_t timer;
-    timer = time(NULL); //get calendar time
-    random_seed = argc > 6 ? atoi(argv[6]) : (int) timer; //default is the current time (sec)
+    random_seed = argc > 6 ? atoi(argv[6]) : 333; //default is the current time (sec)
 
     //print argument info
     printf("Bench starts with arguments:\n");
@@ -59,7 +57,7 @@ int main (int argc, char** argv) {
     //keeps track of number of blocks in list
     uint blk_list_size = 0;
 
-    clock_t start_ticks = clock();  //capture start time
+    clock_t start_ticks = uptime();  //capture start time
 
     uint i;
     for (i=1;i<=ntrials;i++) {
@@ -95,10 +93,9 @@ int main (int argc, char** argv) {
                 blk_list_size--;
             }
         }
-        //print stats at each 10% mark
     }
     free(blk_list);
-    clock_t end_ticks = clock();  //capture end time
+    clock_t end_ticks = uptime();  //capture end time
     double elapsed_time = (double) (end_ticks - start_ticks)/CLOCKS_PER_SEC;  //capture elapsed duration
     printf("Total runtime = %f sec\n", elapsed_time);
     return 0;
