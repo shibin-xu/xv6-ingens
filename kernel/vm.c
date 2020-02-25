@@ -399,13 +399,11 @@ uvmdowngrade(pagetable_t pagetable, uint64 start, uint64 end)
   char *mem;
   uint64 a, pa;
   pte_t *pte;
-  int downgraded = 0;
 
   a = HPGROUNDDOWN(start);
   for (; a < HPGROUNDDOWN(end); a += HPGSIZE) {
     if ((pte = walk(pagetable, a, 0, 1)) == 0) {
       uvmdealloc(pagetable, start, a);
-      downgraded = 0;
       return 0;
     }
     // check if huge page is mapped
@@ -414,23 +412,19 @@ uvmdowngrade(pagetable_t pagetable, uint64 start, uint64 end)
 
     // after downgrading 1 huge page to 512 base pages, we need to free the huge page
     pa = PTE2PA(*pte);
+    // clear PTE to avoid remap error and flush TLB
     *pte = 0;
+    flush_tlb(a, (uint64)pagetable);
     for (int i = 0; i < HPGSIZE / PGSIZE; i++) {
       mem = kalloc();
       memmove(mem, (char *)(pa + i*PGSIZE), PGSIZE);
       if (mappages(pagetable, a + i*PGSIZE, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
         kfree(mem);
         uvmdealloc(pagetable, start, a);
-        downgraded = 0;
         return 0;
       }
     }
-    downgraded = 1;
     hugekfree((void *)pa);
-  }
-
-  if (downgraded) {
-    sfence_vma();
   }
 
   return end;
