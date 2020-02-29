@@ -5,10 +5,15 @@
 #include "proc.h"
 #include "defs.h"
 
+#define PROMO 0
+
 int
 promo(void)
 {
   struct proc *p;
+
+  if (!PROMO)
+    return 1;
 
   for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);   // may cause deadlock???
