@@ -182,6 +182,7 @@ UPROGS=\
 	$U/_alloctest\
 	$U/_specialtest\
 	$U/_hugepagetest\
+	$U/_smallworkertest\
 	$U/_nfree\
 	# $U/_symlinktest\
 
