@@ -181,6 +181,7 @@ UPROGS=\
 	$U/_alloctest\
 	$U/_specialtest\
 	$U/_sequentialaccesstestlongbig\
+	$U/_randacctest\
 	# $U/_symlinktest\
 
 fs.img: mkfs/mkfs README user/xargstest.sh $(UPROGS)
