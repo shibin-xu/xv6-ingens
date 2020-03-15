@@ -1,11 +1,12 @@
 #include "kernel/types.h"
 #include "user/user.h"
+#include "kernel/riscv.h"
 
 int
 main(int argc, char **argv)
 {
     int pids[20];
-    int sz = 4096 * 400; // not a huge page, not 80%
+    int sz = PGSIZE * 400; // not a huge page, not 80%
     int xstatus = 0;
     int i;
     for(i = 0; i < sizeof(pids)/sizeof(pids[0]); i++){
@@ -48,10 +49,6 @@ main(int argc, char **argv)
     while(i-- > 0) {
         kill(pids[i]);
     }
-    // for(i = 0; i < sizeof(pids)/sizeof(pids[0]); i++){
-    //     printf(" killed %d\n", i);
-    //     kill(pids[i]);
-    // }
 
     if (xstatus)
         printf(" ERROR\n");
