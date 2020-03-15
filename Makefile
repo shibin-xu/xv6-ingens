@@ -81,7 +81,13 @@ TOOLPREFIX := $(shell if riscv64-unknown-elf-objdump -i 2>&1 | grep 'elf64-big' 
 	echo "***" 1>&2; exit 1; fi)
 endif
 
-QEMU = qemu-system-riscv64
+# Set LD_LIBRARY_PATH if TLBSim exists
+TLBSIM_DIR=/root/TLBSim
+ifneq "$(wildcard $(TLBSIM_DIR) )" ""
+	QEMU = LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/TLBSim/ qemu-system-riscv64
+else
+	QEMU = qemu-system-riscv64
+endif
 
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
@@ -184,6 +190,7 @@ UPROGS=\
 	$U/_sequentialaccesstestshortbig\
 	$U/_sequentialaccesstestlongsmall\
 	$U/_sequentialaccesstestshortsmall\
+	$U/_randacctest\
 	# $U/_symlinktest\
 
 fs.img: mkfs/mkfs README user/xargstest.sh $(UPROGS)
