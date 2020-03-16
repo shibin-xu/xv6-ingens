@@ -23,37 +23,47 @@ randidx(unsigned int sz) {
 int
 main(int argc, char **argv)
 {
-    randseed = rand();
-    unsigned int sz = 4096 * 512 * 200;  // size of 10 huge pages
-    printf("memory usage before malloc: %d\n", nfree());
-    printf("malloc %d bytes\n", sz);
-    printf("memory usage after malloc: %d\n", nfree());
-    char *arr = malloc(sz);
-    if (!arr) {
-    printf("malloc failed.\n");
-    exit(1);
-    }
 
-    sleep(1);
-    printf("random write access %d bytes\n", sz);
-    for (int i = 0; i < sz; i++) {
-        int randv = randidx(sz);
-        *(arr + randv) = randv % 7;
+    printf("memory usage before activities: %d\n", nfree());
+    int pid = fork();
+    if (pid < 0) {
+      printf("randacctest: fork failed\n");
+      exit(1);
     }
-    printf("Done write\n");
-    sleep(5);
+    if (pid == 0) {
+        randseed = rand();
+        unsigned int sz = 4096 * 512 * 200;  // size of 10 huge pages
+        printf("malloc %d bytes\n", sz);
+        char *arr = malloc(sz);
+        printf("memory usage after malloc: %d\n", nfree());
+        if (!arr) {
+        printf("malloc failed.\n");
+        exit(1);
+        }
 
-    printf("random read write access %d bytes\n", 3*sz);
-    for (int t = 1; t <= 10; t++) {
+        sleep(1);
+        printf("random write access %d bytes\n", sz);
+        for (int i = 0; i < sz; i++) {
+            int randv = randidx(sz);
+            *(arr + randv) = randv % 7;
+        }
+        printf("Done write\n");
+        sleep(5);
+
+        printf("random read write access %d bytes\n", 3*sz);
         for (int i = 0; i < sz; i++) {
             *(arr + randidx(sz)) = *(arr + randidx(sz));
         }
-        printf("Done read write iter:%d\n", t);
+        printf("Done read write\n");
         sleep(5);
+
+        printf("free %d bytes\n", sz);
+        free(arr);
+        exit(0);
+    } else {
+      wait(0);
+      sleep(1);
     }
-
-    printf("free %d bytes\n", sz);
-    free(arr);
-
+    printf("memory usage before exit: %d\n", nfree());
     exit(0);
 }
