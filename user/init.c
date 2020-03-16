@@ -10,7 +10,7 @@ char *argv[] = { "sh", 0 };
 int
 main(void)
 {
-  int pid, wpid, promo_pid;
+  int pid, wpid;
 
   if(open("console", O_RDWR) < 0){
     mknod("console", 1, 1);
@@ -30,18 +30,6 @@ main(void)
       exec("sh", argv);
       printf("init: exec sh failed\n");
       exit(1);
-    } else {
-      promo_pid = fork();
-      if(promo_pid < 0){
-        printf("init: promotion fork failed\n");
-        exit(1);
-      }
-      if (promo_pid == 0) {
-        for(;;){
-          sleep(10);
-          promo();
-        }
-      }
     }
     while((wpid=wait(0)) >= 0 && wpid != pid){
       //printf("zombie!\n");
