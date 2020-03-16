@@ -187,6 +187,9 @@ UPROGS=\
 	$U/_alloctest\
 	$U/_specialtest\
 	$U/_sequentialaccesstestlongbig\
+	$U/_sequentialaccesstestshortbig\
+	$U/_sequentialaccesstestlongsmall\
+	$U/_sequentialaccesstestshortsmall\
 	$U/_randacctest\
 	# $U/_symlinktest\
 
